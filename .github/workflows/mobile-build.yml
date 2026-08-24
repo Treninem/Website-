@@ -1,0 +1,54 @@
+name: Mobile build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.3'
+          channel: stable
+      - name: Generate Android platform
+        run: |
+          flutter create --platforms=android --project-name=work_portal _scaffold
+          rm -rf mobile/android
+          cp -R _scaffold/android mobile/android
+          rm -rf _scaffold
+      - name: Analyze
+        working-directory: mobile
+        run: flutter analyze
+      - name: Build APK
+        working-directory: mobile
+        run: flutter build apk --release --dart-define=API_BASE_URL=${{ vars.API_BASE_URL || 'http://localhost:8000' }}
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: work-portal-android-apk
+          path: mobile/build/app/outputs/flutter-apk/app-release.apk
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.3'
+          channel: stable
+      - name: Generate iOS platform
+        run: |
+          flutter create --platforms=ios --project-name=work_portal _scaffold
+          rm -rf mobile/ios
+          cp -R _scaffold/ios mobile/ios
+          rm -rf _scaffold
+      - name: Analyze
+        working-directory: mobile
+        run: flutter analyze
+      - name: Build iOS (unsigned validation build)
+        working-directory: mobile
+        run: flutter build ios --no-codesign --dart-define=API_BASE_URL=${{ vars.API_BASE_URL || 'http://localhost:8000' }}
