@@ -1,0 +1,13 @@
+services:
+  portal:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_PATH: /app/data/website.db
+      OWNER_BOOTSTRAP_KEY: ${OWNER_BOOTSTRAP_KEY:?Set OWNER_BOOTSTRAP_KEY in .env}
+    volumes:
+      - portal-data:/app/data
+volumes:
+  portal-data:
