@@ -4,7 +4,6 @@ from contextlib import contextmanager
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "data/website.db")
 
-
 def init_db():
     os.makedirs(os.path.dirname(DATABASE_PATH) or ".", exist_ok=True)
     with sqlite3.connect(DATABASE_PATH) as conn:
@@ -38,13 +37,20 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
         CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_user_id INTEGER,
+            action TEXT NOT NULL,
+            target_type TEXT,
+            target_id TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (actor_user_id) REFERENCES users(id)
+        );
         """)
-        # Compatibility with databases created by earlier development versions.
         columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
         if "updated_at" not in columns:
             conn.execute("ALTER TABLE users ADD COLUMN updated_at TEXT")
             conn.execute("UPDATE users SET updated_at = created_at WHERE updated_at IS NULL")
-
 
 @contextmanager
 def get_db():
