@@ -1,7 +1,19 @@
-# Mobile application
+# Work Portal mobile
 
-This directory is reserved for the shared mobile client for Android and iOS.
+Native Flutter client for Android and iOS. This is not a WebView and does not open the website inside an app. The Flutter UI calls the shared FastAPI backend directly.
 
-The mobile application will use the same backend and the same user accounts as the web version. No separate user database or invitation system is created for mobile.
+## API address
 
-Planned technology: Flutter, so Android and iOS can share most of the application code.
+Pass the server URL at build/run time:
+
+`flutter run --dart-define=API_BASE_URL=https://your-domain.example`
+
+Android emulator default is `http://10.0.2.2:8000`.
+
+## Security model
+
+The mobile app uses the same accounts, roles, sessions, invitation registration, username/password changes and owner permissions as the web portal.
+
+## Build
+
+The repository workflow generates the standard Android/iOS platform folders with Flutter tooling, runs static analysis, builds a release APK, and builds iOS with `--no-codesign` for validation.
