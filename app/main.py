@@ -25,6 +25,10 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
     password: str = Field(min_length=8, max_length=128)
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
 def generate_code():
     raw = ''.join(secrets.choice(ALPHABET) for _ in range(16))
     return '-'.join(raw[i:i+4] for i in range(0, 16, 4))
@@ -50,7 +54,6 @@ def create_invite(data: InviteRequest):
 def register(data: RegisterRequest):
     code = data.invite_code.strip().upper()
     with get_db() as db:
-        # BEGIN IMMEDIATE makes consuming the invitation atomic in SQLite.
         db.execute("BEGIN IMMEDIATE")
         invite = db.execute("SELECT * FROM invite_keys WHERE code = ?", (code,)).fetchone()
         if not invite or invite["used_by"] is not None:
@@ -71,6 +74,10 @@ def register(data: RegisterRequest):
         return {"id": cur.lastrowid, "username": data.username, "role": invite["role"]}
 
 @app.post("/api/login")
-def login(data: RegisterRequest):
-    # Placeholder: dedicated login request/session handling is the next step.
-    raise HTTPException(501, "Login is not implemented yet")
+def login(data: LoginRequest):
+    with get_db() as db:
+        user = db.execute("SELECT * FROM users WHERE username = ?", (data.username,)).fetchone()
+        if not user or not user["is_active"] or not pwd_context.verify(data.password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+        # Session/token issuance will be added with the access-control layer.
+        return {"id": user["id"], "username": user["username"], "role": user["role"]}
