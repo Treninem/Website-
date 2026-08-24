@@ -46,18 +46,28 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS form_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT, form_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
-            data_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            data_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'submitted',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (form_id) REFERENCES form_templates(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT NOT NULL,
+            body TEXT NOT NULL DEFAULT '', is_read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
         CREATE INDEX IF NOT EXISTS idx_form_entries_form ON form_entries(form_id);
         CREATE INDEX IF NOT EXISTS idx_form_entries_user ON form_entries(user_id);
+        CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
         """)
         columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
         if "updated_at" not in columns:
             conn.execute("ALTER TABLE users ADD COLUMN updated_at TEXT")
             conn.execute("UPDATE users SET updated_at = created_at WHERE updated_at IS NULL")
+        entry_columns = {row[1] for row in conn.execute("PRAGMA table_info(form_entries)")}
+        if "status" not in entry_columns:
+            conn.execute("ALTER TABLE form_entries ADD COLUMN status TEXT NOT NULL DEFAULT 'submitted'")
 
 @contextmanager
 def get_db():
