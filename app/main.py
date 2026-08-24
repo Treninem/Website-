@@ -12,13 +12,14 @@ from .db import init_db, get_db
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALPHABET = string.ascii_uppercase + string.digits
 SESSION_DAYS = 30
+ROLES = {"owner", "admin", "manager", "worker"}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     yield
 
-app = FastAPI(title="Website", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Website", version="0.3.0", lifespan=lifespan)
 
 class InviteRequest(BaseModel):
     role: str = Field(default="worker", max_length=50)
@@ -40,6 +41,9 @@ class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
 
+class ChangeRoleRequest(BaseModel):
+    role: str = Field(max_length=50)
+
 def generate_code():
     raw = ''.join(secrets.choice(ALPHABET) for _ in range(16))
     return '-'.join(raw[i:i+4] for i in range(0, 16, 4))
@@ -50,15 +54,18 @@ def hash_token(token: str) -> str:
 def create_session(db, user_id: int) -> str:
     token = secrets.token_urlsafe(48)
     expires = (datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)).isoformat()
-    db.execute("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)", (hash_token(token), user_id, expires))
+    db.execute("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
+               (hash_token(token), user_id, expires))
     return token
+
+def audit(db, actor_id, action, target_type=None, target_id=None):
+    db.execute("INSERT INTO audit_log (actor_user_id, action, target_type, target_id) VALUES (?, ?, ?, ?)",
+               (actor_id, action, target_type, str(target_id) if target_id is not None else None))
 
 def get_current_user(authorization: str | None = Header(default=None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authentication required")
     token = authorization.removeprefix("Bearer ").strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
     now = datetime.now(timezone.utc).isoformat()
     with get_db() as db:
         row = db.execute("""
@@ -69,22 +76,42 @@ def get_current_user(authorization: str | None = Header(default=None)):
         raise HTTPException(status_code=401, detail="Session is invalid or expired")
     return dict(row)
 
+def require_owner(user=Depends(get_current_user)):
+    if user["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Owner access required")
+    return user
+
+def require_admin(user=Depends(get_current_user)):
+    if user["role"] not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="Administrative access required")
+    return user
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 @app.post("/api/invites", status_code=status.HTTP_201_CREATED)
-def create_invite(data: InviteRequest):
-    # Temporary bootstrap endpoint; admin authorization will protect it in the owner panel.
+def create_invite(data: InviteRequest, owner=Depends(require_owner)):
+    if data.role not in ROLES or data.role == "owner":
+        raise HTTPException(400, detail="Invalid role for invitation")
     with get_db() as db:
         for _ in range(20):
             code = generate_code()
             try:
-                db.execute("INSERT INTO invite_keys (code, role) VALUES (?, ?)", (code, data.role))
-                return {"code": code, "role": data.role, "uses": 1}
+                cur = db.execute("INSERT INTO invite_keys (code, role) VALUES (?, ?)", (code, data.role))
+                audit(db, owner["id"], "invite.created", "invite", cur.lastrowid)
+                return {"id": cur.lastrowid, "code": code, "role": data.role, "uses": 1}
             except sqlite3.IntegrityError:
                 continue
-    raise HTTPException(500, "Could not generate a unique invitation code")
+    raise HTTPException(500, detail="Could not generate a unique invitation code")
+
+@app.get("/api/invites")
+def list_invites(owner=Depends(require_owner)):
+    with get_db() as db:
+        rows = db.execute("""SELECT id, code, role, created_at, used_at,
+                          CASE WHEN used_by IS NULL THEN 0 ELSE 1 END AS is_used
+                          FROM invite_keys ORDER BY id DESC""").fetchall()
+    return [dict(row) for row in rows]
 
 @app.post("/api/register", status_code=status.HTTP_201_CREATED)
 def register(data: RegisterRequest):
@@ -93,16 +120,20 @@ def register(data: RegisterRequest):
         db.execute("BEGIN IMMEDIATE")
         invite = db.execute("SELECT * FROM invite_keys WHERE code = ?", (code,)).fetchone()
         if not invite or invite["used_by"] is not None:
-            raise HTTPException(400, "Invalid or already used invitation code")
+            raise HTTPException(400, detail="Invalid or already used invitation code")
         try:
-            cur = db.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (data.username, pwd_context.hash(data.password), invite["role"]))
+            cur = db.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                             (data.username, pwd_context.hash(data.password), invite["role"]))
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "Username is already taken")
-        updated = db.execute("UPDATE invite_keys SET used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ? AND used_by IS NULL", (cur.lastrowid, invite["id"]))
+            raise HTTPException(409, detail="Username is already taken")
+        updated = db.execute("UPDATE invite_keys SET used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ? AND used_by IS NULL",
+                            (cur.lastrowid, invite["id"]))
         if updated.rowcount != 1:
-            raise HTTPException(409, "Invitation was used by another registration")
+            raise HTTPException(409, detail="Invitation was used by another registration")
+        audit(db, cur.lastrowid, "account.registered", "user", cur.lastrowid)
         token = create_session(db, cur.lastrowid)
-        return {"id": cur.lastrowid, "username": data.username, "role": invite["role"], "access_token": token, "token_type": "bearer"}
+        return {"id": cur.lastrowid, "username": data.username, "role": invite["role"],
+                "access_token": token, "token_type": "bearer"}
 
 @app.post("/api/login")
 def login(data: LoginRequest):
@@ -111,7 +142,9 @@ def login(data: LoginRequest):
         if not user or not user["is_active"] or not pwd_context.verify(data.password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="Invalid username or password")
         token = create_session(db, user["id"])
-        return {"access_token": token, "token_type": "bearer", "user": {"id": user["id"], "username": user["username"], "role": user["role"]}}
+        audit(db, user["id"], "account.login", "user", user["id"])
+        return {"access_token": token, "token_type": "bearer",
+                "user": {"id": user["id"], "username": user["username"], "role": user["role"]}}
 
 @app.get("/api/me")
 def me(user=Depends(get_current_user)):
@@ -120,27 +153,63 @@ def me(user=Depends(get_current_user)):
 @app.put("/api/me/username")
 def change_username(data: ChangeUsernameRequest, user=Depends(get_current_user)):
     if not pwd_context.verify(data.current_password, user["password_hash"]):
-        raise HTTPException(400, "Current password is incorrect")
+        raise HTTPException(400, detail="Current password is incorrect")
     with get_db() as db:
         try:
-            db.execute("UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (data.new_username, user["id"]))
+            db.execute("UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                       (data.new_username, user["id"]))
+            audit(db, user["id"], "account.username_changed", "user", user["id"])
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "Username is already taken")
+            raise HTTPException(409, detail="Username is already taken")
     return {"username": data.new_username}
 
 @app.put("/api/me/password")
 def change_password(data: ChangePasswordRequest, user=Depends(get_current_user)):
     if not pwd_context.verify(data.current_password, user["password_hash"]):
-        raise HTTPException(400, "Current password is incorrect")
+        raise HTTPException(400, detail="Current password is incorrect")
     with get_db() as db:
-        db.execute("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (pwd_context.hash(data.new_password), user["id"]))
-        # Keep the current request's token valid only until logout in this initial version.
+        db.execute("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                   (pwd_context.hash(data.new_password), user["id"]))
         db.execute("UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ?", (user["id"],))
+        audit(db, user["id"], "account.password_changed", "user", user["id"])
     return {"message": "Password changed. Please sign in again on all devices."}
+
+@app.get("/api/admin/users")
+def list_users(admin=Depends(require_admin)):
+    with get_db() as db:
+        rows = db.execute("SELECT id, username, role, is_active, created_at FROM users ORDER BY id DESC").fetchall()
+    return [dict(row) for row in rows]
+
+@app.put("/api/admin/users/{user_id}/role")
+def change_role(user_id: int, data: ChangeRoleRequest, owner=Depends(require_owner)):
+    if data.role not in ROLES or data.role == "owner":
+        raise HTTPException(400, detail="Invalid role")
+    with get_db() as db:
+        target = db.execute("SELECT id, role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not target:
+            raise HTTPException(404, detail="User not found")
+        db.execute("UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (data.role, user_id))
+        audit(db, owner["id"], "user.role_changed", "user", user_id)
+    return {"id": user_id, "role": data.role}
+
+@app.put("/api/admin/users/{user_id}/active")
+def toggle_user(user_id: int, active: bool, admin=Depends(require_admin)):
+    if user_id == admin["id"]:
+        raise HTTPException(400, detail="You cannot disable your own account")
+    with get_db() as db:
+        target = db.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not target:
+            raise HTTPException(404, detail="User not found")
+        db.execute("UPDATE users SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (1 if active else 0, user_id))
+        if not active:
+            db.execute("UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ?", (user_id,))
+        audit(db, admin["id"], "user.activated" if active else "user.deactivated", "user", user_id)
+    return {"id": user_id, "is_active": active}
 
 @app.post("/api/logout")
 def logout(authorization: str | None = Header(default=None), user=Depends(get_current_user)):
     token = authorization.removeprefix("Bearer ").strip()
     with get_db() as db:
         db.execute("UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = ?", (hash_token(token),))
+        audit(db, user["id"], "account.logout", "user", user["id"])
     return {"message": "Logged out"}
