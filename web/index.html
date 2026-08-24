@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Рабочий портал</title>
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <main class="shell">
+    <section id="auth" class="panel">
+      <div class="brand">Рабочий портал</div>
+      <div class="tabs">
+        <button class="tab active" data-tab="login">Вход</button>
+        <button class="tab" data-tab="register">Регистрация по ключу</button>
+      </div>
+      <form id="login" class="form">
+        <label>Логин<input name="username" autocomplete="username" required></label>
+        <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary">Войти</button>
+      </form>
+      <form id="register" class="form hidden">
+        <label>Ключ приглашения<input name="invite_code" placeholder="XXXX-XXXX-XXXX-XXXX" required></label>
+        <label>Логин<input name="username" autocomplete="username" required></label>
+        <label>Пароль<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <button class="primary">Создать аккаунт</button>
+      </form>
+      <div id="message" class="message"></div>
+    </section>
+
+    <section id="app" class="hidden">
+      <header class="topbar"><strong>Рабочий портал</strong><button id="logout" class="ghost">Выйти</button></header>
+      <div class="grid">
+        <section class="card"><h2>Профиль</h2><div id="profile"></div><a href="#settings">Настройки аккаунта</a></section>
+        <section class="card"><h2>Рабочая область</h2><p>Разделы для производственных данных будут добавляться сюда с учётом роли пользователя.</p></section>
+        <section id="owner" class="card hidden"><h2>Панель владельца</h2><div class="row"><select id="inviteRole"><option value="worker">Работник</option><option value="manager">Руководитель</option><option value="admin">Администратор</option></select><button id="genInvite" class="primary">Сгенерировать ключ</button></div><div id="newInvite" class="invite"></div><div id="invites"></div><hr><div id="users"></div></section>
+        <section id="settings" class="card"><h2>Настройки аккаунта</h2><form id="changeUsername" class="form"><label>Новый логин<input name="new_username" required></label><label>Текущий пароль<input name="current_password" type="password" required></label><button class="primary">Сменить логин</button></form><form id="changePassword" class="form"><label>Текущий пароль<input name="current_password" type="password" required></label><label>Новый пароль<input name="new_password" type="password" minlength="8" required></label><button class="primary">Сменить пароль</button></form></section>
+        <section class="card"><h2>Приложения</h2><p>Полноценные Android и iPhone приложения будут использовать тот же аккаунт и API.</p><div class="downloads"><a class="download" href="#">Android — скачать</a><a class="download" href="#">iPhone — получить</a></div></section>
+      </div>
+    </section>
+  </main>
+  <script src="/static/site.js" defer></script>
+</body>
+</html>
