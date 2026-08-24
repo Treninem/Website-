@@ -1,44 +1,15 @@
 <!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Рабочий портал</title>
-  <link rel="stylesheet" href="/static/site.css">
-</head>
-<body>
-  <main class="shell">
-    <section id="auth" class="panel">
-      <div class="brand">Рабочий портал</div>
-      <div class="tabs">
-        <button class="tab active" data-tab="login">Вход</button>
-        <button class="tab" data-tab="register">Регистрация по ключу</button>
-      </div>
-      <form id="login" class="form">
-        <label>Логин<input name="username" autocomplete="username" required></label>
-        <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
-        <button class="primary">Войти</button>
-      </form>
-      <form id="register" class="form hidden">
-        <label>Ключ приглашения<input name="invite_code" placeholder="XXXX-XXXX-XXXX-XXXX" required></label>
-        <label>Логин<input name="username" autocomplete="username" required></label>
-        <label>Пароль<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
-        <button class="primary">Создать аккаунт</button>
-      </form>
-      <div id="message" class="message"></div>
-    </section>
-
-    <section id="app" class="hidden">
-      <header class="topbar"><strong>Рабочий портал</strong><button id="logout" class="ghost">Выйти</button></header>
-      <div class="grid">
-        <section class="card"><h2>Профиль</h2><div id="profile"></div><a href="#settings">Настройки аккаунта</a></section>
-        <section class="card"><h2>Рабочая область</h2><p>Разделы для производственных данных будут добавляться сюда с учётом роли пользователя.</p></section>
-        <section id="owner" class="card hidden"><h2>Панель владельца</h2><div class="row"><select id="inviteRole"><option value="worker">Работник</option><option value="manager">Руководитель</option><option value="admin">Администратор</option></select><button id="genInvite" class="primary">Сгенерировать ключ</button></div><div id="newInvite" class="invite"></div><div id="invites"></div><hr><div id="users"></div></section>
-        <section id="settings" class="card"><h2>Настройки аккаунта</h2><form id="changeUsername" class="form"><label>Новый логин<input name="new_username" required></label><label>Текущий пароль<input name="current_password" type="password" required></label><button class="primary">Сменить логин</button></form><form id="changePassword" class="form"><label>Текущий пароль<input name="current_password" type="password" required></label><label>Новый пароль<input name="new_password" type="password" minlength="8" required></label><button class="primary">Сменить пароль</button></form></section>
-        <section class="card"><h2>Приложения</h2><p>Полноценные Android и iPhone приложения будут использовать тот же аккаунт и API.</p><div class="downloads"><a class="download" href="#">Android — скачать</a><a class="download" href="#">iPhone — получить</a></div></section>
-      </div>
-    </section>
-  </main>
-  <script src="/static/site.js" defer></script>
-</body>
-</html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Рабочий портал</title><link rel="stylesheet" href="/static/site.css"></head>
+<body><main class="shell">
+<section id="auth" class="panel auth-panel"><div class="brand">Рабочий портал</div><p class="muted">Закрытая система для сотрудников</p><div class="tabs"><button class="tab active" data-tab="login">Вход</button><button class="tab" data-tab="register">Регистрация по ключу</button></div>
+<form id="login" class="form"><label>Логин<input name="username" autocomplete="username" required></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Войти</button></form>
+<form id="register" class="form hidden"><label>Ключ приглашения<input name="invite_code" placeholder="XXXX-XXXX-XXXX-XXXX" required></label><label>Логин<input name="username" required></label><label>Пароль<input name="password" type="password" minlength="8" required></label><button class="primary">Создать аккаунт</button></form><div id="message" class="message"></div></section>
+<section id="app" class="hidden"><header class="topbar"><div><strong>Рабочий портал</strong><span id="roleBadge" class="badge"></span></div><div class="header-actions"><button id="refresh" class="ghost">Обновить</button><button id="logout" class="ghost">Выйти</button></div></header>
+<nav class="nav"><button data-view="home" class="active">Главная</button><button data-view="forms">Формы</button><button data-view="entries">Мои данные</button><button data-view="notifications">Уведомления <span id="unread"></span></button><button data-view="admin" id="adminNav" class="hidden">Управление</button><button data-view="settings">Настройки</button></nav>
+<section id="view-home" class="view"><div class="grid"><article class="card"><h2>Здравствуйте, <span id="profileName"></span></h2><p>Здесь находятся доступные рабочие формы и результаты их обработки.</p><button class="primary" data-view="forms">Перейти к формам</button></article><article class="card"><h2>Приложения</h2><p>Используйте тот же аккаунт в полноценном мобильном приложении.</p><div class="downloads"><a class="download" href="#" aria-disabled="true">Android — готовится</a><a class="download" href="#" aria-disabled="true">iPhone — закрытое распространение</a></div></article></div></section>
+<section id="view-forms" class="view hidden"><div class="section-head"><h2>Рабочие формы</h2><button id="newForm" class="primary hidden">Создать форму</button></div><div id="formsList" class="cards"></div></section>
+<section id="view-entries" class="view hidden"><div class="section-head"><h2>Мои данные</h2><select id="entryFormFilter"><option value="">Все формы</option></select></div><div id="entriesList" class="cards"></div></section>
+<section id="view-notifications" class="view hidden"><div class="section-head"><h2>Уведомления</h2><button id="markAllRead" class="ghost">Отметить просмотренными</button></div><div id="notificationsList" class="cards"></div></section>
+<section id="view-admin" class="view hidden"><div class="tabs admin-tabs"><button class="tab active" data-admin="users">Пользователи</button><button class="tab" data-admin="invites">Ключи</button><button class="tab" data-admin="entries">Все записи</button></div><div id="adminUsers"></div><div id="adminInvites" class="hidden"></div><div id="adminEntries" class="hidden"></div></section>
+<section id="view-settings" class="view hidden"><div class="grid"><article class="card"><h2>Сменить логин</h2><form id="changeUsername" class="form"><label>Новый логин<input name="new_username" required></label><label>Текущий пароль<input name="current_password" type="password" required></label><button class="primary">Сохранить</button></form></article><article class="card"><h2>Сменить пароль</h2><form id="changePassword" class="form"><label>Текущий пароль<input name="current_password" type="password" required></label><label>Новый пароль<input name="new_password" type="password" minlength="8" required></label><button class="primary">Сменить пароль</button></form></article></div></section>
+</section></main><dialog id="modal"><button id="closeModal" class="close">×</button><div id="modalContent"></div></dialog><script src="/static/site.js" defer></script></body></html>
